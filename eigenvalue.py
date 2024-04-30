@@ -4,6 +4,7 @@ import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 from matplotlib import transforms
+from matplotlib.colors import SymLogNorm, Normalize as Norm
 from mpi4py import MPI
 import time
 from scipy import interpolate, optimize
@@ -21,8 +22,18 @@ def plot_grid(cf, Ta):
     zz = cf.parameter_grids[1]
     grid = cf.evalue_grid.real
     biggest_val = 2 * np.abs(grid).std()
-    plt.pcolormesh(yy, zz, grid, cmap="RdBu_r", vmin=-biggest_val, vmax=biggest_val)
+    norm = SymLogNorm(vmin=-biggest_val, vmax=biggest_val, linthresh=1e-2)
+    norm = Norm(vmin=-biggest_val, vmax=biggest_val)
+    plt.pcolormesh(
+        yy,
+        zz,
+        grid,
+        cmap="RdBu_r",
+        norm=norm,
+    )
     plt.colorbar()
+    # plt.xscale("log")
+    # plt.yscale("log")
     plt.xlabel("ky")
     plt.ylabel("Ra")
     plt.savefig(f"Ta{args.Ta}_grid.png")
@@ -45,7 +56,7 @@ args = parser.parse_args()
 # print(args)
 comm = MPI.COMM_WORLD
 
-Nz = 256
+Nz = 1024
 z_basis = de2.Chebyshev("z", Nz, interval=(0, 1))
 d = de2.Domain([z_basis], np.complex128, comm=MPI.COMM_SELF)
 z = z_basis.grid()
@@ -149,7 +160,11 @@ if comm.rank == 0:
 
 logger.info("Beginning critical finding with root polishing...")
 begin = time.time()
-crit = cf.crit_finder(polish_roots=True, tol=1e-5)
+try:
+    crit = cf.crit_finder(polish_roots=True, tol=1e-5)
+except:
+    logger.error("No Roots Found!")
+    exit(-1)
 end = time.time()
 logger.info("critical finding/root polishing time: {:10.5f} sec".format(end - start))
 
