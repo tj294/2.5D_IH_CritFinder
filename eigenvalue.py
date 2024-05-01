@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__.split(".")[-1])
 def plot_grid(cf, Ta):
     fig = plt.figure(figsize=(9, 6))
     ax = fig.add_subplot(111)
-    yy = cf.parameter_grids[0]
-    zz = cf.parameter_grids[1]
-    grid = cf.evalue_grid.real
+    yy = cf.parameter_grids[0].T
+    zz = cf.parameter_grids[1].T
+    grid = cf.evalue_grid.real.T
     biggest_val = 2 * np.abs(grid).std()
     norm = SymLogNorm(vmin=-biggest_val, vmax=biggest_val, linthresh=1e-2)
     norm = Norm(vmin=-biggest_val, vmax=biggest_val)
@@ -34,6 +34,8 @@ def plot_grid(cf, Ta):
     plt.colorbar()
     # plt.xscale("log")
     # plt.yscale("log")
+    # Set y-label to be in exp notation
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0e}"))
     plt.xlabel("ky")
     plt.ylabel("Ra")
     plt.savefig(f"Ta{args.Ta}_grid.png")
@@ -48,6 +50,7 @@ parser.add_argument(
 )
 parser.add_argument("--n", type=str, default="50", help="Resolution of Sweep")
 parser.add_argument("--Ta", type=str, default="1e4", help="Taylor number to simulate")
+parser.add_argument("--Nz", type=int, default=512, help="Vertical resolution")
 parser.add_argument(
     "--overwrite", "-o", action="store_true", help="Overwrite existing grid"
 )
@@ -56,13 +59,13 @@ args = parser.parse_args()
 # print(args)
 comm = MPI.COMM_WORLD
 
-Nz = 1024
+Nz = args.Nz
 z_basis = de2.Chebyshev("z", Nz, interval=(0, 1))
 d = de2.Domain([z_basis], np.complex128, comm=MPI.COMM_SELF)
 z = z_basis.grid()
 
 pert = de2.EVP(d, ["u", "v", "w", "P", "T", "uz", "vz", "wz", "Tz"], eigenvalue="omega")
-pert.parameters["Rf"] = 1e7
+pert.parameters["Rf"] = 1e5
 pert.parameters["Pr"] = 1
 pert.parameters["Ta"] = float(args.Ta) ** 0.5
 theta = np.radians(5)
@@ -185,7 +188,7 @@ if comm.rank == 0:
         yy_root[0], yy_root[-1], 100
     )  # Constructing a kx array for plotting
     #
-    n = 128
+    n = 256
     Ly = 4
     ky_restrict = []
 
@@ -233,4 +236,4 @@ if comm.rank == 0:
         )
     )
     plt.tight_layout()
-    plt.savefig("crit_finder.png")
+    plt.savefig(f"Ta{args.Ta}_crit_finder.png")
