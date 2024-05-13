@@ -35,7 +35,7 @@ def plot_grid(cf, Ta):
     # plt.xscale("log")
     # plt.yscale("log")
     # Set y-label to be in exp notation
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0e}"))
+    # ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0e}"))
     plt.xlabel("ky")
     plt.ylabel("Ra")
     plt.savefig(f"Ta{args.Ta}_grid.png")
@@ -65,15 +65,17 @@ d = de2.Domain([z_basis], np.complex128, comm=MPI.COMM_SELF)
 z = z_basis.grid()
 
 pert = de2.EVP(d, ["u", "v", "w", "P", "T", "uz", "vz", "wz", "Tz"], eigenvalue="omega")
-pert.parameters["Rf"] = 1e5
-pert.parameters["Pr"] = 1
-pert.parameters["Ta"] = float(args.Ta) ** 0.5
+pert.parameters["Rf"] = Rf = 6000
+pert.parameters["Pr"] = Pr = 1
+pert.parameters["Ta"] = np.sqrt(float(args.Ta))
 theta = np.radians(5)
 pert.parameters["cos_phi"] = np.cos(theta)
 pert.parameters["sin_phi"] = np.sin(theta)
-pert.parameters["k"] = 2  # horizontal wavenumber
+pert.parameters["k"] = 5  # horizontal wavenumber
 pert.substitutions["dt(A)"] = "omega*A"
 pert.substitutions["dy(A)"] = "1j*k*A"
+pert.parameters["X"] = np.sqrt(Rf * Pr)
+pert.parameters["Y"] = np.sqrt(Pr / Rf)
 
 # Equilibrium Temperature
 l = 0.1
@@ -96,18 +98,24 @@ pert.parameters["T_eq_z"] = T_eq_z
 pert.add_equation("dy(v) + wz = 0")
 
 # x-component of Navier Stokes equation
-pert.add_equation("dt(u) - (dy(dy(u)) + dz(uz)) + Ta*(w*sin_phi - v*cos_phi) = 0")
+pert.add_equation(
+    "dt(u) - Y * (dy(dy(u)) + dz(uz)) + (Ta * Y) * (w*sin_phi - v*cos_phi) = 0"
+)
 
 # y-component of Navier Stokes equation
-pert.add_equation("dt(v) - (dy(dy(v)) + dz(vz)) + dy(P) + Ta*(u*cos_phi) = 0")
+pert.add_equation(
+    "dt(v) + (1/(Rf*Pr)) * dy(P) - Y * (dy(dy(v)) + dz(vz)) + (Ta * Y) * (u*cos_phi) = 0"
+)
 
 # z-component of Navier Stokes equation
 pert.add_equation(
-    "dt(w) - (dy(dy(w)) + dz(wz)) + dz(P) - Ta*(u*sin_phi) - (Rf/Pr) * T = 0"
+    "dt(w) + (1/(Rf*Pr)) * dz(P) - T - Y * (dy(dy(w)) + dz(wz)) - (Ta * Y) * (u*sin_phi) = 0"
 )
 
 # Temperature equation
-pert.add_equation("dt(T) + (v*dy(T_eq) - w*T_eq_z) - (1/Pr) * (dy(dy(T)) + dz(Tz)) = 0")
+pert.add_equation(
+    "dt(T) + (v * dy(T_eq) + w * dz(T_eq)) - (1/X) * (dy(dy(T)) + dz(Tz)) = 0"
+)
 
 # dz substitutions
 pert.add_equation("uz - dz(u) = 0")
@@ -153,13 +161,15 @@ except:
     if comm.rank == 0:
         cf.save_grid(direc)
 
-plot_grid(cf, args.Ta)
+
 # cf.plot_crit(xlabel="k", ylabel="Ra", cmap="RdBu_r")
 
 end = time.time()
 if comm.rank == 0:
     print("### Grid Generation Complete ###")
     print(f"Time taken: {(end-start)/60:10.5f} m ({end-start:10.5f} s) \n")
+
+plot_grid(cf, args.Ta)
 
 logger.info("Beginning critical finding with root polishing...")
 begin = time.time()
