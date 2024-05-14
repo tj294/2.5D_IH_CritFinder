@@ -81,7 +81,7 @@ pert.parameters["Y"] = np.sqrt(Pr / Rf)
 l = 0.1
 a = 1 / (l * (1 - np.exp(-1 / l)))
 beta = 1.0
-C = a * l * l + 1  # Arbitrary constant, C=1+al^2 makes T_eq(z=0)=1
+C = a * l * l * np.exp(-1 / l) + a * l - beta / 2  # Pins T_eq to 0 at z=1
 
 
 T_eq = d.new_field(name="T_eq")
@@ -134,7 +134,7 @@ pert.add_bc("left(w) = 0")
 pert.add_bc("right(w) = 0")
 # Insulating
 pert.add_bc("left(Tz) = 0")
-pert.add_bc("right(Tz) = 0")
+pert.add_bc("right(T) = 0")
 
 EP = Eigenproblem(pert)
 
